@@ -24,6 +24,10 @@
 
 ---
 
+> ⚠️ **Note:** Loading the movie lists is currently slow, as the full index is processed on each load. This will be improved in a future update for faster browsing.
+
+---
+
 ## 🚀 Quick Start
 
 1. **[Download the latest ZIP](https://github.com/Nigel1992/rarefilmm-kodi-addon/releases/latest)**
