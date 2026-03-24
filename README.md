@@ -1,43 +1,68 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Nigel1992/rarefilmm-kodi-addon/main/plugin.video.rarefilmm/icon.png" width="120" alt="RareFilmm Logo"/>
+</p>
 
-# RareFilmm Kodi Addon
+<h1 align="center">RareFilmm Kodi Addon</h1>
 
-A Kodi video plugin for browsing and playing movies from [rarefilmm.com](https://rarefilmm.com).
+<p align="center">
+  <b>Browse, search, and play rare movies from <a href="https://rarefilmm.com">rarefilmm.com</a> directly in Kodi!</b><br>
+  <a href="https://github.com/Nigel1992/rarefilmm-kodi-addon/releases/latest"><img src="https://img.shields.io/github/v/release/Nigel1992/rarefilmm-kodi-addon?label=Release" alt="Release"></a>
+  <img src="https://img.shields.io/badge/Kodi-19%2B-blue" alt="Kodi 19+">
+  <img src="https://img.shields.io/badge/Python-3.x-blue" alt="Python 3">
+</p>
 
-## Features
-- Browse the full RareFilmm index, paginated (50 movies per page)
-- Search for movies by title (case-insensitive)
-- Displays movie poster and plot (from the site's OpenGraph metadata)
-- Direct playback: press Enter to play a movie (no right-click needed)
-- Extracts and plays raw HLS manifests (including OK.ru embeds)
-- Kodi 19/20+ compatible (Python 3)
+---
 
-## Usage
-1. **Install**: Use the provided ZIP or copy the folder to your Kodi addons directory.
-2. **Browse**: Open the "RareFilmm" addon in Kodi. Use page navigation to browse movies.
-3. **Search**: Use the "Search RareFilmm" entry to find movies by title.
-4. **Play**: Select a movie and press Enter to play. The addon resolves the best available stream.
+## ✨ Features
 
-## Functions
-- `list_movies(page=1)`: Shows 50 movies per page, with art and plot.
-- `search_movies(query)`: Prompts for a search term, lists matching movies, and allows direct playback.
-- `play_movie(url)`: Resolves and plays the best available stream for a movie page.
-- `fetch_movie_metadata(url)`: Extracts poster and plot from the movie page's OpenGraph tags.
-- `find_direct_links(page_html, base)`: Finds playable video URLs, including OK.ru and HLS manifests.
+- 🎬 **Browse** the full RareFilmm index (50 movies per page)
+- 🔎 **Search** for movies by title
+- 🖼️ **Movie posters & plots** (from site OpenGraph tags)
+- ▶️ **Direct playback** (just press Enter)
+- 🌐 **OK.ru & HLS** stream extraction
+- 🧩 **Kodi 19/20+** compatible (Python 3)
 
-## Installation
-### Method 1: Kodi ZIP Install
-1. Download the latest `plugin.video.rarefilmm-1.0.0.zip` from the [releases](https://github.com/YOUR_GITHUB_USER/rarefilmm-kodi-addon/releases).
-2. In Kodi: **Add-ons > Install from zip file** and select the downloaded ZIP.
+---
 
-### Method 2: Manual
-- Copy the `plugin.video.rarefilmm` folder to your Kodi `addons` directory (e.g. `~/.kodi/addons/`).
+## 🚀 Quick Start
 
-## Requirements
+1. **[Download the latest ZIP](https://github.com/Nigel1992/rarefilmm-kodi-addon/releases/latest)**
+2. In Kodi: `Add-ons` → `Install from zip file` → select the ZIP
+3. Open the "RareFilmm" addon and enjoy!
+
+---
+
+## 🛠️ Usage
+
+- **Browse:** Use page navigation to explore movies
+- **Search:** Use the "Search RareFilmm" entry to find movies by title
+- **Play:** Select a movie and press Enter to play
+
+---
+
+## 🧩 Functions
+
+- `list_movies(page=1)`: Shows 50 movies per page, with art and plot
+- `search_movies(query)`: Prompts for a search term, lists matching movies, and allows direct playback
+- `play_movie(url)`: Resolves and plays the best available stream for a movie page
+- `fetch_movie_metadata(url)`: Extracts poster and plot from the movie page's OpenGraph tags
+- `find_direct_links(page_html, base)`: Finds playable video URLs, including OK.ru and HLS manifests
+
+---
+
+## 📦 Requirements
+
 - Kodi 19 (Matrix) or newer
 - Python 3
 
-## License
+---
+
+## 📄 License
+
 MIT
 
 ---
-Maintained by Nigel1992. Not affiliated with rarefilmm.com.
+
+<p align="center">
+  <i>Maintained by Nigel1992. Not affiliated with rarefilmm.com.</i>
+</p>
