@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/Nigel1992/rarefilmm-kodi-addon/master/icon.png" width="120" alt="RareFilmm Logo"/>
+  <img src="https://raw.githubusercontent.com/Nigel1992/rarefilmm-kodi-addon/master/icon.png" width="300" alt="RareFilmm Logo"/>
 </p>
 
 <h1 align="center">RareFilmm Kodi Addon</h1>
