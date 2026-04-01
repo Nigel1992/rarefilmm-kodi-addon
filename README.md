@@ -48,11 +48,16 @@
 
 ## 🧩 Functions
 
-- `list_movies(page=1)`: Shows 50 movies per page, with art and plot
-- `search_movies(query)`: Prompts for a search term, lists matching movies, and allows direct playback
-- `play_movie(url)`: Resolves and plays the best available stream for a movie page
-- `fetch_movie_metadata(url)`: Extracts poster and plot from the movie page's OpenGraph tags
-- `find_direct_links(page_html, base)`: Finds playable video URLs, including OK.ru and HLS manifests
+- `load_settings()`: Load addon settings into `SETTINGS` and apply `PAGE_SIZE` and `USER_AGENT`. Settings include `use_cache`, `cache_ttl`, `page_size`, `user_agent`, `fetch_metadata`, `preferred_stream`, `show_notifications`, and `open_in_external`.
+- `get_index_entries(force_refresh=False)`: Return parsed index entries; uses a local cache (`index_cache.json`) when `use_cache` is enabled and respects `cache_ttl` (minutes). Pass `force_refresh=True` to bypass the cache and refresh from the site.
+- `parse_index(html_text)`: Parse the RareFilmm index HTML and return a list of entry dicts with `title`, `href`, and an `html` snippet used for display.
+- `find_direct_links(page_html, base)`: Extract direct playable URLs (m3u8, mp4, etc.) from the page HTML. Scans `<source>` tags, absolute/protocol-relative URLs, inline JSON/scripts (including OK.ru payloads), iframes (fetched and scanned), and returns a cleaned, deduplicated list of URLs.
+- `fetch_movie_metadata(movie_url)`: Fetch `og:image` and `og:description` from a movie page and return `{'image', 'description'}`. This is optional and slower; enabled via the `fetch_metadata` setting.
+- `list_movies(page=1, force_refresh=False)`: Display a paginated list of movies using `PAGE_SIZE` (from settings). Adds Search/Settings/Refresh entries, provides previous/next navigation, and optionally fetches metadata per item.
+- `search_movies(query=None)`: Prompt for a search query (if `query` is None), search cached index titles, and present matching movies for playback.
+- `play_movie(url)`: Resolve playable links for a movie page using `find_direct_links`. Reorders links per the `preferred_stream` setting (`auto`, `hls`, `mp4`), allows selection when multiple streams are found, and hands the final URL to Kodi for playback.
+- `build_url(query)`: Helper to build plugin URLs for internal navigation.
+- `router(paramstring)`: Main entrypoint that dispatches actions (`list`, `play`, `search`, `settings`) based on plugin query parameters.
 
 ---
 
