@@ -69,6 +69,16 @@ MIT
 
 ---
 
+## 📝 Recent changes (since commit f944800)
+
+- Added settings: `use_cache` (index caching), `cache_ttl` (minutes), `page_size` (items per page), `fetch_metadata` (toggle to fetch metadata), and `user_agent` (HTTP User-Agent).
+- Implemented local caching for index entries (`index_cache.json`).
+- Added `LICENSE` (MIT) and `.gitignore`.
+- Removed `__pycache__` directory.
+- Documentation updates: logo size, image URL, and note about slow loading of movie lists.
+
+---
+
 <p align="center">
   <i>Maintained by Nigel1992. Not affiliated with rarefilmm.com.</i>
 </p>
