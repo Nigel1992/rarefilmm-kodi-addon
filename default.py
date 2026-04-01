@@ -5,23 +5,33 @@ import re
 import html
 import urllib.request
 import urllib.parse
+import os
+import json
+import time
 
 try:
     import xbmc
     import xbmcgui
     import xbmcplugin
+    import xbmcaddon
 except Exception:
-    xbmc = xbmcgui = xbmcplugin = None
+    xbmc = xbmcgui = xbmcplugin = xbmcaddon = None
 
+# plugin handle
 handle = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
 BASE_URL = 'https://rarefilmm.com'
 INDEX_URL = BASE_URL + '/film-index/'
+# sensible defaults; these will be overridden by add-on settings when available
 USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
 PAGE_SIZE = 50
 
+# runtime settings (populated by load_settings)
+SETTINGS = {}
+
 def http_get(url, timeout=20):
-    req = urllib.request.Request(url, headers={'User-Agent': USER_AGENT, 'Accept': 'text/html'})
+    headers = {'User-Agent': SETTINGS.get('user_agent', USER_AGENT), 'Accept': 'text/html'}
+    req = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         data = resp.read()
         try:
@@ -63,6 +73,142 @@ def parse_index(html_text):
         entries.append({'title': title, 'href': href, 'html': snippet})
     return entries
 
+
+def get_index_entries(force_refresh=False):
+    """Return parsed index entries, using a local cache when enabled.
+    If force_refresh is True, the cache will be ignored and refreshed.
+    """
+    cache_file = _local_cache_file()
+    now = int(time.time())
+    use_cache = SETTINGS.get('use_cache', True)
+    ttl = int(SETTINGS.get('cache_ttl', 60)) * 60
+
+    if not force_refresh and use_cache and os.path.exists(cache_file):
+        try:
+            with open(cache_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            ts = int(data.get('_ts', 0))
+            if now - ts < ttl:
+                return data.get('entries', [])
+        except Exception:
+            # fall through to refresh
+            pass
+
+    # fetch and parse fresh
+    try:
+        html_text = http_get(INDEX_URL)
+        entries = parse_index(html_text)
+    except Exception:
+        entries = []
+
+    # attempt to write cache
+    try:
+        ddir = os.path.dirname(cache_file)
+        if ddir and not os.path.exists(ddir):
+            os.makedirs(ddir, exist_ok=True)
+        with open(cache_file, 'w', encoding='utf-8') as f:
+            json.dump({'_ts': now, 'entries': entries}, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+    return entries
+
+
+def _local_cache_file():
+    """Return a writable local cache path for index_cache.json.
+    Prefer the addon profile directory when running inside Kodi; otherwise use
+    the file next to this script (works for development/testing).
+    """
+    try:
+        # inside Kodi: use addon profile path
+        if xbmcaddon:
+            addon = xbmcaddon.Addon()
+            profile = addon.getAddonInfo('profile')
+            cache_dir = xbmc.translatePath(profile)
+            if isinstance(cache_dir, bytes):
+                cache_dir = cache_dir.decode('utf-8')
+            return os.path.join(cache_dir, 'index_cache.json')
+    except Exception:
+        pass
+    # fallback: adjacent to this script
+    return os.path.join(os.path.dirname(__file__), 'index_cache.json')
+
+
+def _get_setting_bool(addon, key, default=False):
+    try:
+        val = addon.getSetting(key)
+        return str(val).lower() in ('true', '1', 'yes')
+    except Exception:
+        return default
+
+
+def _get_setting_int(addon, key, default):
+    try:
+        return int(addon.getSetting(key))
+    except Exception:
+        return default
+
+
+def _get_setting_str(addon, key, default):
+    try:
+        v = addon.getSetting(key)
+        return v if v is not None and v != '' else default
+    except Exception:
+        return default
+
+
+def load_settings():
+    """Populate SETTINGS dict from addon settings (when available) or defaults."""
+    global SETTINGS, PAGE_SIZE, USER_AGENT
+    defaults = {
+        'use_cache': True,
+        'cache_ttl': 60,      # minutes
+        'page_size': PAGE_SIZE,
+        'user_agent': USER_AGENT,
+        'fetch_metadata': False,
+        'preferred_stream': 'auto',  # auto, hls, mp4
+        'show_notifications': True,
+        'open_in_external': True,
+    }
+    if xbmcaddon:
+        addon = xbmcaddon.Addon()
+        use_cache = _get_setting_bool(addon, 'use_cache', defaults['use_cache'])
+        cache_ttl = _get_setting_int(addon, 'cache_ttl', defaults['cache_ttl'])
+        page_size = _get_setting_int(addon, 'page_size', defaults['page_size'])
+        ua = _get_setting_str(addon, 'user_agent', defaults['user_agent'])
+        fetch_meta = _get_setting_bool(addon, 'fetch_metadata', defaults['fetch_metadata'])
+        pref = _get_setting_str(addon, 'preferred_stream', defaults['preferred_stream'])
+        notify = _get_setting_bool(addon, 'show_notifications', defaults['show_notifications'])
+        external = _get_setting_bool(addon, 'open_in_external', defaults['open_in_external'])
+    else:
+        use_cache = defaults['use_cache']
+        cache_ttl = defaults['cache_ttl']
+        page_size = defaults['page_size']
+        ua = defaults['user_agent']
+        fetch_meta = defaults['fetch_metadata']
+        pref = defaults['preferred_stream']
+        notify = defaults['show_notifications']
+        external = defaults['open_in_external']
+
+    SETTINGS = {
+        'use_cache': use_cache,
+        'cache_ttl': cache_ttl,
+        'page_size': page_size,
+        'user_agent': ua,
+        'fetch_metadata': fetch_meta,
+        'preferred_stream': pref,
+        'show_notifications': notify,
+        'open_in_external': external,
+    }
+    # apply to module globals
+    PAGE_SIZE = SETTINGS['page_size']
+    USER_AGENT = SETTINGS['user_agent']
+    return SETTINGS
+
+
+# load settings at import time so behaviour is consistent
+load_settings()
+
 def build_url(query):
     return sys.argv[0] + '?' + urllib.parse.urlencode(query)
 
@@ -90,12 +236,9 @@ def fetch_movie_metadata(movie_url):
     return {'image': image, 'description': description}
 
 
-def list_movies(page=1):
-    # Use site pagination to load only one page of index entries (PAGE_SIZE per page).
-    # The site returns the full index; fetch it and slice into pages locally
-    page_url = INDEX_URL
-    html_text = http_get(page_url)
-    items = parse_index(html_text)
+def list_movies(page=1, force_refresh=False):
+    # Use cached index entries when possible
+    items = get_index_entries(force_refresh=force_refresh)
     total = len(items)
     start = (page - 1) * PAGE_SIZE
     end = start + PAGE_SIZE
@@ -107,10 +250,20 @@ def list_movies(page=1):
 
     # Add a search entry at the top
     try:
-        search_url = build_url({'action': 'search'})
-        li_search = xbmcgui.ListItem(label='Search RareFilmm') if xbmcgui else None
-        if xbmcplugin:
+        if xbmcgui:
+            search_url = build_url({'action': 'search'})
+            li_search = xbmcgui.ListItem(label='Search RareFilmm')
             xbmcplugin.addDirectoryItem(handle=handle, url=search_url, listitem=li_search, isFolder=True)
+
+            # Settings shortcut
+            settings_url = build_url({'action': 'settings'})
+            li_settings = xbmcgui.ListItem(label='Settings')
+            xbmcplugin.addDirectoryItem(handle=handle, url=settings_url, listitem=li_settings, isFolder=True)
+
+            # Refresh index
+            refresh_url = build_url({'action': 'list', 'page': str(page), 'refresh': '1'})
+            li_refresh = xbmcgui.ListItem(label='Refresh index')
+            xbmcplugin.addDirectoryItem(handle=handle, url=refresh_url, listitem=li_refresh, isFolder=True)
     except Exception:
         pass
 
@@ -122,10 +275,14 @@ def list_movies(page=1):
             xbmcplugin.addDirectoryItem(handle=handle, url=prev_url, listitem=li_prev, isFolder=True)
 
     for it in page_items:
-        metadata = fetch_movie_metadata(it['href'])
+        # optionally fetch metadata (slower) or show a lightweight list for speed
+        if SETTINGS.get('fetch_metadata'):
+            metadata = fetch_movie_metadata(it['href'])
+        else:
+            metadata = {'image': None, 'description': None}
+
         li = xbmcgui.ListItem(label=it['title']) if xbmcgui else None
         if li:
-            # Only use the og:description meta content for the plot
             plot = metadata.get('description') or ''
             li.setInfo('video', {'title': it['title'], 'plot': plot})
             li.setProperty('IsPlayable', 'true')
@@ -136,6 +293,7 @@ def list_movies(page=1):
                 art['fanart'] = metadata['image']
             if art:
                 li.setArt(art)
+
         url = build_url({'action': 'play', 'url': it['href']})
         if xbmcplugin:
             xbmcplugin.addDirectoryItem(handle=handle, url=url, listitem=li, isFolder=False)
@@ -244,7 +402,7 @@ def play_movie(url):
     page_html = http_get(url)
     direct_links = find_direct_links(page_html, url)
     if not direct_links:
-        if xbmcgui:
+        if xbmcgui and SETTINGS.get('show_notifications'):
             xbmcgui.Dialog().notification('RareFilmm', 'No direct playable links found, opening page', xbmcgui.NOTIFICATION_INFO, 3000)
         # fall back to opening the page URL in the player or external browser
         if xbmcplugin:
@@ -257,20 +415,47 @@ def play_movie(url):
         if xbmc and hasattr(xbmc, 'Player'):
             xbmc.Player().play(url)
         return
+
+    # reorder links according to preferred_stream setting
+    pref = SETTINGS.get('preferred_stream', 'auto')
+    def _prefer(links, ext):
+        head = [l for l in links if l.lower().find(ext) != -1]
+        tail = [l for l in links if l not in head]
+        return head + tail
+
+    if pref == 'hls':
+        direct_links = _prefer(direct_links, '.m3u8')
+    elif pref == 'mp4':
+        direct_links = _prefer(direct_links, '.mp4')
+
     if len(direct_links) == 1:
         play_url = direct_links[0]
     else:
         if xbmcgui:
-            titles = [u for u in direct_links]
+            # build compact titles for selection: show hostname + extension
+            titles = []
+            for u in direct_links:
+                try:
+                    p = urllib.parse.urlparse(u)
+                    ext = os.path.splitext(p.path)[1].lstrip('.') or 'link'
+                    titles.append('%s — %s' % (p.netloc or u, ext))
+                except Exception:
+                    titles.append(u)
             sel = xbmcgui.Dialog().select('Choose stream', titles)
             if sel == -1:
                 return
             play_url = direct_links[sel]
         else:
             play_url = direct_links[0]
+
     # Properly resolve the playable URL for Kodi
     if xbmcplugin:
         li = xbmcgui.ListItem(path=play_url) if xbmcgui else None
+        # give Kodi some metadata where possible
+        try:
+            li.setProperty('IsPlayable', 'true')
+        except Exception:
+            pass
         try:
             xbmcplugin.setResolvedUrl(handle, True, li)
             return
@@ -291,9 +476,8 @@ def search_movies(query=None):
                 query = ''
     if not query:
         return
-    # Fetch full index and search titles
-    html_text = http_get(INDEX_URL)
-    entries = parse_index(html_text)
+    # Fetch full index (cached) and search titles
+    entries = get_index_entries()
     matches = [e for e in entries if query.lower() in e['title'].lower()]
     if xbmcplugin:
         xbmcplugin.setPluginCategory(handle, 'Search: %s' % query)
@@ -305,7 +489,10 @@ def search_movies(query=None):
             xbmcplugin.endOfDirectory(handle)
         return
     for it in matches:
-        metadata = fetch_movie_metadata(it['href'])
+        if SETTINGS.get('fetch_metadata'):
+            metadata = fetch_movie_metadata(it['href'])
+        else:
+            metadata = {'image': None, 'description': None}
         li = xbmcgui.ListItem(label=it['title']) if xbmcgui else None
         if li:
             plot = metadata.get('description') or ''
@@ -329,6 +516,19 @@ def router(paramstring):
     elif action == 'search':
         q = params.get('q')
         search_movies(q)
+    elif action == 'settings':
+        if xbmcaddon:
+            try:
+                xbmcaddon.Addon().openSettings()
+            except Exception:
+                pass
+        return
+    elif action == 'list':
+        page = 1
+        if params.get('page') and params.get('page').isdigit():
+            page = int(params.get('page'))
+        force_refresh = str(params.get('refresh', '')).lower() in ('1', 'true', 'yes')
+        list_movies(page, force_refresh=force_refresh)
     else:
         page = 1
         if params.get('page') and params.get('page').isdigit():

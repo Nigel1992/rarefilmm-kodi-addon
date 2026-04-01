@@ -7,6 +7,7 @@
 <p align="center">
   <b>Browse, search, and play rare movies from <a href="https://rarefilmm.com">rarefilmm.com</a> directly in Kodi!</b><br>
   <a href="https://github.com/Nigel1992/rarefilmm-kodi-addon/releases/latest"><img src="https://img.shields.io/github/v/release/Nigel1992/rarefilmm-kodi-addon?label=Release" alt="Release"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/Changelog-View-orange" alt="Changelog"></a>
   <img src="https://img.shields.io/badge/Kodi-19%2B-blue" alt="Kodi 19+">
   <img src="https://img.shields.io/badge/Python-3.x-blue" alt="Python 3">
 </p>
@@ -15,7 +16,8 @@
 
 ## ✨ Features
 
-- 🎬 **Browse** the full RareFilmm index (50 movies per page)
+- 🎬 **Browse** the full RareFilmm index
+- ⚙️ **Customizable items per page** in settings
 - 🔎 **Search** for movies by title
 - 🖼️ **Movie posters & plots** (from site OpenGraph tags)
 - ▶️ **Direct playback** (just press Enter)

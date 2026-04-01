@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<settings>
+  <category label="General">
+    <setting id="use_cache" type="bool" label="Use index cache" default="true" />
+    <setting id="cache_ttl" type="number" label="Cache TTL (minutes)" default="60" />
+    <setting id="page_size" type="number" label="Items per page" default="50" />
+    <setting id="fetch_metadata" type="bool" label="Fetch metadata (slower)" default="false" />
+    <setting id="user_agent" type="text" label="HTTP User-Agent" default="Mozilla/5.0 (Windows NT 10.0; Win64; x64)" />
+  </category>
+
+  <category label="Playback">
+    <setting id="preferred_stream" type="string" label="Preferred stream type" default="auto">
+      <options>
+        <option label="Auto" value="auto" />
+        <option label="Prefer HLS (m3u8)" value="hls" />
+        <option label="Prefer MP4" value="mp4" />
+      </options>
+    </setting>
+    <setting id="open_in_external" type="bool" label="Open unresolvable pages in external player" default="true" />
+    <setting id="show_notifications" type="bool" label="Show notifications" default="true" />
+  </category>
+</settings>
