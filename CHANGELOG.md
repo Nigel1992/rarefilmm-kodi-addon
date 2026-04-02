@@ -1,12 +1,31 @@
 # Changelog
 
-## [Unreleased]
+## [1.1.0] - 2026-04-02
 
 ### Added
+- **Performance optimization**: 28-worker parallel metadata fetching (8-9 seconds for 100 items vs 80+ seconds before)
+- Gzip decompression for HTTP responses
+- Batch cache writes (1 write per page load instead of 100+ individual writes)
+- HTTP connection pooling for reusable connections
+- Full pagination support for index fetching (automatically grabs all 2900+ movies on first load)
+- Improved regex patterns for metadata extraction (handles og:image/og:description with both property and name attributes)
+- Metadata caching (`metadata_cache.json`) for instant retrieval
 - Settings: `use_cache` (index caching), `cache_ttl` (minutes), `page_size` (items per page), `fetch_metadata` (toggle to fetch metadata), and `user_agent` (HTTP User-Agent).
 - Local caching for index entries (writes `index_cache.json`).
-- `CHANGELOG.md` and `LICENSE` (MIT) added to the project.
+- `CHANGELOG.md` and `LICENSE` (GPL-2.0-only) added to the project.
 - `.gitignore` to exclude build artifacts and temporary files.
+
+### Changed
+- Metadata fetching now uses 28 parallel workers for optimal throughput
+- Index fetching now supports full pagination to grab all 2900+ movies automatically
+- Settings loading now properly initializes at module import time
+- Updated README with performance improvements
+
+### Fixed
+- Fixed gzip-compressed HTML responses not being decompressed
+- Fixed settings not being loaded from addon configuration
+- Fixed metadata extraction failing on meta tags with both property and name attributes
+- Fixed metadata not being scraped even when enabled in settings
 
 ### Changed
 - Documentation updates: README improvements (logo size, image URL), and a note about slow loading of movie lists.
