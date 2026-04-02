@@ -44,6 +44,7 @@ SETTINGS = {}
 
 def http_get(url, timeout=20):
     """Fetch URL with optimized headers for speed. Handles gzip decompression."""
+    _debug_log(f'HTTP GET: {url}', 'DEBUG')
     headers = {
         'User-Agent': SETTINGS.get('user_agent', USER_AGENT), 
         'Accept': 'text/html',
@@ -51,20 +52,28 @@ def http_get(url, timeout=20):
         'Connection': 'keep-alive',
     }
     req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        data = resp.read()
-        
-        # Handle gzip-compressed responses
-        if resp.headers.get('Content-Encoding') == 'gzip':
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = resp.read()
+            
+            # Handle gzip-compressed responses
+            if resp.headers.get('Content-Encoding') == 'gzip':
+                try:
+                    data = gzip.decompress(data)
+                except Exception:
+                    pass  # If decompression fails, try to use raw data
+            
             try:
-                data = gzip.decompress(data)
+                result = data.decode(resp.headers.get_content_charset() or 'utf-8', errors='replace')
+                _debug_log(f'HTTP GET SUCCESS: {url} ({len(result)} bytes)', 'DEBUG')
+                return result
             except Exception:
-                pass  # If decompression fails, try to use raw data
-        
-        try:
-            return data.decode(resp.headers.get_content_charset() or 'utf-8', errors='replace')
-        except Exception:
-            return data.decode('utf-8', errors='replace')
+                result = data.decode('utf-8', errors='replace')
+                _debug_log(f'HTTP GET SUCCESS: {url} ({len(result)} bytes, fallback encoding)', 'DEBUG')
+                return result
+    except Exception as e:
+        _debug_log(f'HTTP GET ERROR: {url} - {str(e)}', 'ERROR')
+        raise
 
 def strip_tags(s):
     s = re.sub(r'<[^>]+>', '', s)
@@ -120,6 +129,7 @@ def get_index_entries(force_refresh=False):
     Fetches all pages in parallel with aggressive worker pool for maximum speed.
     Shows progress notifications to user during caching.
     """
+    _debug_log(f'get_index_entries: force_refresh={force_refresh}', 'INFO')
     cache_file = _local_cache_file()
     now = int(time.time())
     use_cache = SETTINGS.get('use_cache', True)
@@ -131,12 +141,16 @@ def get_index_entries(force_refresh=False):
                 data = json.load(f)
             ts = int(data.get('_ts', 0))
             if now - ts < ttl:
-                return data.get('entries', [])
-        except Exception:
+                entries = data.get('entries', [])
+                _debug_log(f'Using cached index: {len(entries)} entries, age {(now - ts) // 60} minutes', 'INFO')
+                return entries
+        except Exception as e:
+            _debug_log(f'Cache read error: {str(e)}', 'WARNING')
             # fall through to refresh
             pass
 
     # Create progress dialog
+    _debug_log('Refreshing index from network...', 'INFO')
     progress_dialog = None
     try:
         if xbmcgui:
@@ -171,9 +185,11 @@ def get_index_entries(force_refresh=False):
                 
                 if html_text is None:
                     # Error fetching this page
+                    _debug_log(f'Failed to fetch page {page_num}', 'WARNING')
                     consecutive_empty += 1
                     if consecutive_empty >= 3:
                         # Three consecutive fetch errors = we've hit the end
+                        _debug_log('3 consecutive fetch errors, stopping', 'INFO')
                         break
                     continue
                 
@@ -184,14 +200,18 @@ def get_index_entries(force_refresh=False):
                     consecutive_empty += 1
                     if consecutive_empty >= 3:
                         # Three consecutive empty pages = definitely done
+                        _debug_log('3 consecutive empty pages, stopping', 'INFO')
                         break
                 else:
                     consecutive_empty = 0
                     # Add only new entries we haven't seen before
+                    new_count = 0
                     for entry in page_entries:
                         if entry['href'] not in seen_urls:
                             seen_urls.add(entry['href'])
                             entries.append(entry)
+                            new_count += 1
+                    _debug_log(f'Page {page_num}: {new_count} new entries (total: {len(entries)})', 'DEBUG')
                 
                 # Update progress dialog - always move forward
                 if progress_dialog and processed_count % 2 == 0:  # Update every 2 pages to reduce flicker
@@ -207,6 +227,7 @@ def get_index_entries(force_refresh=False):
                 # Bail early if we've processed way more pages than we're getting entries
                 # (means the site structure changed or we've hit the real end)
                 if processed_count > 50 and len(entries) < processed_count * 5:
+                    _debug_log(f'Low entry-to-page ratio, stopping early (processed: {processed_count}, entries: {len(entries)})', 'INFO')
                     break
 
         # Show disk caching phase
@@ -223,7 +244,9 @@ def get_index_entries(force_refresh=False):
                 os.makedirs(ddir, exist_ok=True)
             with open(cache_file, 'w', encoding='utf-8') as f:
                 json.dump({'_ts': now, 'entries': entries}, f, ensure_ascii=False)
-        except Exception:
+            _debug_log(f'Saved cache: {len(entries)} entries to {cache_file}', 'INFO')
+        except Exception as e:
+            _debug_log(f'Cache write error: {str(e)}', 'WARNING')
             pass
 
         # Update to 100% before closing
@@ -241,6 +264,7 @@ def get_index_entries(force_refresh=False):
             except Exception:
                 pass
 
+    _debug_log(f'Index refresh complete: {len(entries)} total entries', 'INFO')
     return entries
 
 
@@ -327,6 +351,42 @@ def _get_setting_str(addon, key, default):
         return default
 
 
+def _get_debug_log_file():
+    """Return path to debug log file."""
+    try:
+        if xbmcaddon:
+            addon = xbmcaddon.Addon()
+            profile = addon.getAddonInfo('profile')
+            log_dir = xbmc.translatePath(profile)
+            if isinstance(log_dir, bytes):
+                log_dir = log_dir.decode('utf-8')
+            return os.path.join(log_dir, 'debug.log')
+    except Exception:
+        pass
+    return os.path.join(os.path.dirname(__file__), 'debug.log')
+
+
+def _debug_log(message, level='INFO'):
+    """Write a debug log message to file if debug logging is enabled."""
+    if not SETTINGS.get('debug_logging', False):
+        return
+    
+    try:
+        log_file = _get_debug_log_file()
+        log_dir = os.path.dirname(log_file)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+        
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+        log_entry = f'[{timestamp}] [{level}] {message}\n'
+        
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(log_entry)
+    except Exception as e:
+        # Silently fail if logging doesn't work
+        pass
+
+
 def load_settings():
     """Populate SETTINGS dict from addon settings (when available) or defaults."""
     global SETTINGS, PAGE_SIZE, USER_AGENT
@@ -339,6 +399,7 @@ def load_settings():
         'preferred_stream': 'auto',  # auto, hls, mp4
         'show_notifications': True,
         'open_in_external': True,
+        'debug_logging': False,
     }
     if xbmcaddon:
         addon = xbmcaddon.Addon()
@@ -350,6 +411,7 @@ def load_settings():
         pref = _get_setting_str(addon, 'preferred_stream', defaults['preferred_stream'])
         notify = _get_setting_bool(addon, 'show_notifications', defaults['show_notifications'])
         external = _get_setting_bool(addon, 'open_in_external', defaults['open_in_external'])
+        debug = _get_setting_bool(addon, 'debug_logging', defaults['debug_logging'])
     else:
         use_cache = defaults['use_cache']
         cache_ttl = defaults['cache_ttl']
@@ -359,6 +421,7 @@ def load_settings():
         pref = defaults['preferred_stream']
         notify = defaults['show_notifications']
         external = defaults['open_in_external']
+        debug = defaults['debug_logging']
 
     # Update the global SETTINGS dictionary
     SETTINGS.clear()
@@ -371,6 +434,7 @@ def load_settings():
         'preferred_stream': pref,
         'show_notifications': notify,
         'open_in_external': external,
+        'debug_logging': debug,
     })
     # apply to module globals
     PAGE_SIZE = SETTINGS['page_size']
@@ -424,11 +488,14 @@ def fetch_movie_metadata(movie_url, timeout=10):
     # Check cache first
     if movie_url in _METADATA_CACHE:
         cached = _METADATA_CACHE[movie_url]
+        _debug_log(f'Metadata cache hit: {movie_url}', 'DEBUG')
         return cached
     
+    _debug_log(f'Fetching metadata: {movie_url}', 'DEBUG')
     try:
         page_html = http_get(movie_url, timeout=timeout)
-    except Exception:
+    except Exception as e:
+        _debug_log(f'Metadata fetch error: {str(e)}', 'WARNING')
         return {'image': None, 'description': None}
     
     image = None
@@ -440,6 +507,7 @@ def fetch_movie_metadata(movie_url, timeout=10):
         m = _PATTERN_OG_IMAGE_ALT.search(page_html)
     if m:
         image = m.group(1).strip()
+        _debug_log(f'Found image: {image[:100]}...', 'DEBUG')
     
     # Try property attribute first, then fallback to name attribute for description
     m = _PATTERN_OG_DESCRIPTION.search(page_html)
@@ -448,6 +516,7 @@ def fetch_movie_metadata(movie_url, timeout=10):
     if m:
         try:
             description = html.unescape(m.group(1).strip())
+            _debug_log(f'Found description: {description[:100]}...', 'DEBUG')
         except Exception:
             description = m.group(1).strip()
     
@@ -476,6 +545,8 @@ def fetch_multiple_metadata(urls, max_workers=28, timeout=10):
     results = {}
     uncached_urls = [u for u in urls if u not in _METADATA_CACHE]
     
+    _debug_log(f'fetch_multiple_metadata: {len(urls)} total, {len(_METADATA_CACHE)} cached, {len(uncached_urls)} uncached', 'INFO')
+    
     # Return cached results immediately
     for url in urls:
         if url in _METADATA_CACHE:
@@ -483,19 +554,26 @@ def fetch_multiple_metadata(urls, max_workers=28, timeout=10):
     
     # Fetch uncached in parallel
     if uncached_urls:
+        _debug_log(f'Fetching {len(uncached_urls)} uncached metadata items in parallel (max_workers={max_workers})', 'INFO')
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_url = {
                 executor.submit(fetch_movie_metadata, url, timeout): url 
                 for url in uncached_urls
             }
+            completed = 0
             for future in as_completed(future_to_url):
                 url = future_to_url[future]
+                completed += 1
                 try:
                     results[url] = future.result()
-                except Exception:
+                except Exception as e:
+                    _debug_log(f'Error fetching metadata for {url}: {str(e)}', 'WARNING')
                     results[url] = {'image': None, 'description': None}
+                if completed % 10 == 0:
+                    _debug_log(f'Metadata progress: {completed}/{len(uncached_urls)} completed', 'DEBUG')
         
         # Batch save cache once at the end
+        _debug_log(f'Saving metadata cache ({len(_METADATA_CACHE)} items)', 'DEBUG')
         _save_metadata_cache(_METADATA_CACHE)
     
     return results
@@ -508,12 +586,18 @@ def build_url(query):
 
 
 def list_movies(page=1, force_refresh=False):
+    _debug_log(f'list_movies: page={page}, force_refresh={force_refresh}', 'INFO')
+    
     # Use cached index entries when possible
     items = get_index_entries(force_refresh=force_refresh)
     total = len(items)
+    _debug_log(f'Total movies available: {total}', 'DEBUG')
+    
     start = (page - 1) * PAGE_SIZE
     end = start + PAGE_SIZE
     page_items = items[start:end]
+    
+    _debug_log(f'Page {page}: showing items {start+1}-{min(end, total)} of {total}', 'INFO')
 
     if xbmcplugin:
         xbmcplugin.setPluginCategory(handle, 'RareFilmm')
@@ -535,8 +619,8 @@ def list_movies(page=1, force_refresh=False):
             refresh_url = build_url({'action': 'list', 'page': str(page), 'refresh': '1'})
             li_refresh = xbmcgui.ListItem(label='Refresh index')
             xbmcplugin.addDirectoryItem(handle=handle, url=refresh_url, listitem=li_refresh, isFolder=True)
-    except Exception:
-        pass
+    except Exception as e:
+        _debug_log(f'Error adding menu items: {str(e)}', 'WARNING')
 
     # page nav previous
     if page > 1:
@@ -548,6 +632,7 @@ def list_movies(page=1, force_refresh=False):
     # Fetch metadata in parallel if enabled (blazing fast!)
     metadata_dict = {}
     if SETTINGS.get('fetch_metadata'):
+        _debug_log(f'Fetching metadata for {len(page_items)} items', 'INFO')
         urls = [it['href'] for it in page_items]
         metadata_dict = fetch_multiple_metadata(urls, max_workers=4)
 
@@ -579,36 +664,63 @@ def list_movies(page=1, force_refresh=False):
             li_next = xbmcgui.ListItem(label='Next page (%d) >>' % (page + 1)) if xbmcgui else None
             if xbmcplugin:
                 xbmcplugin.addDirectoryItem(handle=handle, url=next_url, listitem=li_next, isFolder=True)
-    except Exception:
-        pass
+    except Exception as e:
+        _debug_log(f'Error adding next page link: {str(e)}', 'WARNING')
 
     if xbmcplugin:
         xbmcplugin.endOfDirectory(handle)
+    
+    _debug_log(f'list_movies complete: {len(page_items)} items displayed', 'DEBUG')
 
 def find_direct_links(page_html, base):
+    _debug_log(f'find_direct_links: searching {len(page_html)} bytes from {base}', 'DEBUG')
     found = []
+    
     # <source src=> entries
+    source_matches = 0
     for m in re.finditer(r'<source[^>]*src=[\'\"](?P<h>[^\'\"]+)[\'\"]', page_html, re.I):
         h = urllib.parse.urljoin(base, m.group('h'))
         found.append(h)
+        source_matches += 1
+    if source_matches > 0:
+        _debug_log(f'Found {source_matches} <source> tag(s)', 'DEBUG')
+    
     # Any absolute or protocol-relative video URLs in the page (JSON, scripts, attributes)
+    video_url_matches = 0
     for m in re.finditer(r'(?P<h>(?:https?:)?//[^\'\"\s>]+\.(?:m3u8|mp4|mkv|mov|webm|avi)(?:\?[^\'\"\s>]*)?)', page_html, re.I):
         u = m.group('h')
         u = urllib.parse.urljoin(base, u)
         found.append(u)
+        video_url_matches += 1
+    if video_url_matches > 0:
+        _debug_log(f'Found {video_url_matches} video URL(s) in page', 'DEBUG')
+    
     # hls manifest URLs in inline scripts or JSON objects, including escaped OK.ru payload
     page_clean = page_html.replace('\\&quot;', '"').replace('&quot;', '"').replace('\\u0026', '&').replace('\\u002F', '/')
     # capture the full raw video.m3u8 path and query from hlsManifestUrl if available
+    hls_matches = 0
     for m in re.finditer(r'hlsManifestUrl[^\n]*?(https?://[^"\'\s>]+?\.m3u8(?:\?[^"\'\s>]*)?)', page_clean, re.I):
         h = urllib.parse.urljoin(base, m.group(1))
         found.append(h)
+        hls_matches += 1
+    if hls_matches > 0:
+        _debug_log(f'Found {hls_matches} hlsManifestUrl(s)', 'DEBUG')
+    
     # download links
+    download_matches = 0
     for m in re.finditer(r'href=[\'\"](?P<h>[^\'\"]+)[\'\"][^>]*>(?:[^<]*download[^<]*)</a>', page_html, re.I):
         h = urllib.parse.urljoin(base, m.group('h'))
         found.append(h)
+        download_matches += 1
+    if download_matches > 0:
+        _debug_log(f'Found {download_matches} download link(s)', 'DEBUG')
+    
     # iframes: fetch and search inside iframe content
+    iframe_matches = 0
     for m in re.finditer(r'<iframe[^>]*src=[\'\"](?P<h>[^\'\"]+)[\'\"]', page_html, re.I):
         src = urllib.parse.urljoin(base, m.group('h'))
+        iframe_matches += 1
+        _debug_log(f'Found iframe {iframe_matches}: {src}', 'DEBUG')
         try:
             iframe_html = http_get(src)
             # look for any video URLs in iframe HTML
@@ -621,8 +733,10 @@ def find_direct_links(page_html, base):
             for n in re.finditer(r'hlsManifestUrl\s*[:=]\s*"(?P<h>https?://[^"\s>]+?\.m3u8(?:\?[^"\s>]*)?)"', iframe_clean, re.I):
                 u = urllib.parse.urljoin(src, n.group('h'))
                 found.append(u)
-        except Exception:
+        except Exception as e:
+            _debug_log(f'Error processing iframe {iframe_matches}: {str(e)}', 'WARNING')
             continue
+    
     # clean and dedupe preserving order
     def _clean_url(u, ref):
         if not u:
@@ -670,12 +784,28 @@ def find_direct_links(page_html, base):
             continue
         seen.add(cu)
         out.append(cu)
+    
+    _debug_log(f'Final extracted links: {len(out)} (after deduplication from {len(found)} raw matches)', 'INFO')
     return out
 
 def play_movie(url):
-    page_html = http_get(url)
-    direct_links = find_direct_links(page_html, url)
+    _debug_log(f'play_movie: {url}', 'INFO')
+    try:
+        page_html = http_get(url)
+        _debug_log(f'Fetched movie page: {len(page_html)} bytes', 'DEBUG')
+    except Exception as e:
+        _debug_log(f'Failed to fetch movie page: {str(e)}', 'ERROR')
+        raise
+    
+    try:
+        direct_links = find_direct_links(page_html, url)
+        _debug_log(f'Found {len(direct_links)} direct link(s)', 'INFO')
+    except Exception as e:
+        _debug_log(f'Error finding direct links: {str(e)}', 'ERROR')
+        direct_links = []
+    
     if not direct_links:
+        _debug_log('No direct playable links found', 'WARNING')
         if xbmcgui and SETTINGS.get('show_notifications'):
             xbmcgui.Dialog().notification('RareFilmm', 'No direct playable links found, opening page', xbmcgui.NOTIFICATION_INFO, 3000)
         # fall back to opening the page URL in the player or external browser
@@ -699,11 +829,14 @@ def play_movie(url):
 
     if pref == 'hls':
         direct_links = _prefer(direct_links, '.m3u8')
+        _debug_log(f'Applied HLS preference, reordered {len(direct_links)} links', 'DEBUG')
     elif pref == 'mp4':
         direct_links = _prefer(direct_links, '.mp4')
+        _debug_log(f'Applied MP4 preference, reordered {len(direct_links)} links', 'DEBUG')
 
     if len(direct_links) == 1:
         play_url = direct_links[0]
+        _debug_log(f'Selected single link for playback', 'DEBUG')
     else:
         if xbmcgui:
             # build compact titles for selection: show hostname + extension
@@ -715,14 +848,19 @@ def play_movie(url):
                     titles.append('%s — %s' % (p.netloc or u, ext))
                 except Exception:
                     titles.append(u)
+            _debug_log(f'Showing user selection dialog with {len(titles)} options', 'DEBUG')
             sel = xbmcgui.Dialog().select('Choose stream', titles)
             if sel == -1:
+                _debug_log('User cancelled stream selection', 'INFO')
                 return
             play_url = direct_links[sel]
+            _debug_log(f'User selected stream {sel}: {play_url[:100]}...', 'DEBUG')
         else:
             play_url = direct_links[0]
+            _debug_log(f'Selected first link (no GUI)', 'DEBUG')
 
     # Properly resolve the playable URL for Kodi
+    _debug_log(f'Playing URL: {play_url[:100]}...', 'INFO')
     if xbmcplugin:
         li = xbmcgui.ListItem(path=play_url) if xbmcgui else None
         # give Kodi some metadata where possible
@@ -748,15 +886,26 @@ def search_movies(query=None):
                 query = input('Search RareFilmm: ')
             except Exception:
                 query = ''
+    
+    _debug_log(f'search_movies: query="{query}"', 'INFO')
+    
     if not query:
+        _debug_log('Empty search query, returning', 'DEBUG')
         return
+    
     # Fetch full index (cached) and search titles
     entries = get_index_entries()
+    _debug_log(f'Searching {len(entries)} entries for: {query}', 'DEBUG')
+    
     matches = [e for e in entries if query.lower() in e['title'].lower()]
+    _debug_log(f'Found {len(matches)} matches', 'INFO')
+    
     if xbmcplugin:
         xbmcplugin.setPluginCategory(handle, 'Search: %s' % query)
         xbmcplugin.setContent(handle, 'movies')
+    
     if not matches:
+        _debug_log('No matches found', 'INFO')
         if xbmcgui:
             xbmcgui.Dialog().notification('RareFilmm', 'No matches found', xbmcgui.NOTIFICATION_INFO, 3000)
         if xbmcplugin:
@@ -766,6 +915,7 @@ def search_movies(query=None):
     # Fetch metadata in parallel if enabled (super fast!)
     metadata_dict = {}
     if SETTINGS.get('fetch_metadata'):
+        _debug_log(f'Fetching metadata for {len(matches)} matches', 'INFO')
         urls = [it['href'] for it in matches]
         metadata_dict = fetch_multiple_metadata(urls, max_workers=4)
     
@@ -783,37 +933,57 @@ def search_movies(query=None):
         url = build_url({'action': 'play', 'url': it['href']})
         if xbmcplugin:
             xbmcplugin.addDirectoryItem(handle=handle, url=url, listitem=li, isFolder=False)
+    
     if xbmcplugin:
         xbmcplugin.endOfDirectory(handle)
+    
+    _debug_log(f'Search complete: displayed {len(matches)} results', 'INFO')
 
 def router(paramstring):
+    _debug_log(f'router: paramstring={paramstring}', 'DEBUG')
     params = dict(urllib.parse.parse_qsl(paramstring.lstrip('?')))
     action = params.get('action')
+    _debug_log(f'Action: {action}, Params: {params}', 'INFO')
+    
     if action == 'play':
         url = params.get('url')
         if url:
+            _debug_log(f'Playing: {url}', 'INFO')
             play_movie(url)
+        else:
+            _debug_log('Play action without URL', 'WARNING')
     elif action == 'search':
         q = params.get('q')
+        _debug_log(f'Search action: {q}', 'INFO')
         search_movies(q)
     elif action == 'settings':
+        _debug_log('Opening settings', 'INFO')
         if xbmcaddon:
             try:
                 xbmcaddon.Addon().openSettings()
-            except Exception:
-                pass
+                _debug_log('Settings opened successfully', 'DEBUG')
+            except Exception as e:
+                _debug_log(f'Error opening settings: {str(e)}', 'ERROR')
         return
     elif action == 'list':
         page = 1
         if params.get('page') and params.get('page').isdigit():
             page = int(params.get('page'))
         force_refresh = str(params.get('refresh', '')).lower() in ('1', 'true', 'yes')
+        _debug_log(f'List action: page={page}, force_refresh={force_refresh}', 'INFO')
         list_movies(page, force_refresh=force_refresh)
     else:
         page = 1
         if params.get('page') and params.get('page').isdigit():
             page = int(params.get('page'))
+        _debug_log(f'Default action: listing page {page}', 'INFO')
         list_movies(page)
 
 if __name__ == '__main__':
+    _debug_log('=' * 60, 'INFO')
+    _debug_log('RareFilmm addon started', 'INFO')
+    _debug_log(f'Debug logging enabled: {SETTINGS.get("debug_logging", False)}', 'INFO')
+    _debug_log(f'Settings: {SETTINGS}', 'DEBUG')
+    _debug_log('=' * 60, 'INFO')
     router(sys.argv[2] if len(sys.argv) > 2 else '')
+    _debug_log('RareFilmm addon finished', 'INFO')

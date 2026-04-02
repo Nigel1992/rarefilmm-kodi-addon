@@ -19,4 +19,8 @@
     <setting id="open_in_external" type="bool" label="Open unresolvable pages in external player" default="true" />
     <setting id="show_notifications" type="bool" label="Show notifications" default="true" />
   </category>
+
+  <category label="Debug">
+    <setting id="debug_logging" type="bool" label="Enable debug logging" default="false" />
+  </category>
 </settings>
