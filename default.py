@@ -356,10 +356,16 @@ def _get_debug_log_file():
     try:
         if xbmcaddon:
             addon = xbmcaddon.Addon()
-            profile = addon.getAddonInfo('profile')
-            log_dir = xbmc.translatePath(profile)
+            addon_id = addon.getAddonInfo('id')
+            profile_path = f'special://profile/addon_data/{addon_id}/'
+            log_dir = xbmc.translatePath(profile_path)
             if isinstance(log_dir, bytes):
                 log_dir = log_dir.decode('utf-8')
+            
+            # Ensure directory exists
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir, exist_ok=True)
+            
             return os.path.join(log_dir, 'debug.log')
     except Exception:
         pass
@@ -374,17 +380,25 @@ def _debug_log(message, level='INFO'):
     try:
         log_file = _get_debug_log_file()
         log_dir = os.path.dirname(log_file)
+        
+        # Ensure directory exists
         if log_dir and not os.path.exists(log_dir):
             os.makedirs(log_dir, exist_ok=True)
         
         timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
         log_entry = f'[{timestamp}] [{level}] {message}\n'
         
+        # Write to file with explicit flush
         with open(log_file, 'a', encoding='utf-8') as f:
             f.write(log_entry)
+            f.flush()
     except Exception as e:
-        # Silently fail if logging doesn't work
-        pass
+        # Log to xbmc log if available for debugging
+        try:
+            if xbmc:
+                xbmc.log(f'[RareFilmm] Debug log error: {str(e)}', xbmc.LOGERROR)
+        except Exception:
+            pass
 
 
 def load_settings():
