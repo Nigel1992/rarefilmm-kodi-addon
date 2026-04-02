@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.2.3] - 2026-04-02
+
+### Fixed
+- **LibreELEC & Read-Only Systems Support**: Completely refactored debug logging for full xbmcvfs compatibility
+- **Robust Fallback**: If file writing fails (common on restricted systems), logs automatically fallback to Kodi's main log
+- **Path Fixes**: Now uses `special://profile/addon_data/` which works across all Kodi variants
+- **Pure VFS Operations**: Removed all os.path operations in debug logging, uses only xbmcvfs
+
+### Details
+- Uses xbmcvfs.File() for all file operations (works on LibreELEC, Android, Linux, Windows)
+- Automatic directory creation via xbmcvfs.mkdirs()
+- If file write fails once, falls back to xbmc.log() for remainder of session
+- Proper log level mapping (DEBUG, INFO, WARNING, ERROR)
+
 ## [1.2.2] - 2026-04-02
 
 ### Fixed

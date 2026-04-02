@@ -19,8 +19,9 @@ try:
     import xbmcgui
     import xbmcplugin
     import xbmcaddon
+    import xbmcvfs
 except Exception:
-    xbmc = xbmcgui = xbmcplugin = xbmcaddon = None
+    xbmc = xbmcgui = xbmcplugin = xbmcaddon = xbmcvfs = None
 
 # Enable HTTP connection pooling for faster requests
 HTTPConnection._http_vsn = 11
@@ -351,54 +352,71 @@ def _get_setting_str(addon, key, default):
         return default
 
 
+# Global flag to track if file logging failed (fallback to xbmc.log)
+_debug_file_fallback = False
+
 def _get_debug_log_file():
-    """Return path to debug log file."""
+    """Return path to debug log file using Kodi special:// path."""
     try:
-        if xbmcaddon:
+        if xbmcaddon and xbmc:
             addon = xbmcaddon.Addon()
             addon_id = addon.getAddonInfo('id')
+            # Use special:// VFS path - works on all systems including LibreELEC
             profile_path = f'special://profile/addon_data/{addon_id}/'
             log_dir = xbmc.translatePath(profile_path)
             if isinstance(log_dir, bytes):
                 log_dir = log_dir.decode('utf-8')
-            
-            # Ensure directory exists
-            if not os.path.exists(log_dir):
-                os.makedirs(log_dir, exist_ok=True)
-            
-            return os.path.join(log_dir, 'debug.log')
+            # Return path with trailing slash for xbmcvfs compatibility
+            return log_dir + 'debug.log'
     except Exception:
         pass
-    return os.path.join(os.path.dirname(__file__), 'debug.log')
+    return None
 
 
 def _debug_log(message, level='INFO'):
-    """Write a debug log message to file if debug logging is enabled."""
+    """Write debug message to file (via xbmcvfs) or fallback to xbmc.log()."""
+    global _debug_file_fallback
+    
     if not SETTINGS.get('debug_logging', False):
         return
     
-    try:
-        log_file = _get_debug_log_file()
-        log_dir = os.path.dirname(log_file)
-        
-        # Ensure directory exists
-        if log_dir and not os.path.exists(log_dir):
-            os.makedirs(log_dir, exist_ok=True)
-        
-        timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-        log_entry = f'[{timestamp}] [{level}] {message}\n'
-        
-        # Write to file with explicit flush
-        with open(log_file, 'a', encoding='utf-8') as f:
-            f.write(log_entry)
-            f.flush()
-    except Exception as e:
-        # Log to xbmc log if available for debugging
+    timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+    log_entry = f'[{timestamp}] [{level}] {message}'
+    
+    # Try file-based logging first (but only if previous attempts succeeded)
+    if not _debug_file_fallback:
         try:
-            if xbmc:
-                xbmc.log(f'[RareFilmm] Debug log error: {str(e)}', xbmc.LOGERROR)
-        except Exception:
-            pass
+            log_file = _get_debug_log_file()
+            if log_file and xbmcvfs:
+                # Ensure directory exists
+                log_dir = log_file.rsplit('/', 1)[0] + '/'
+                if not xbmcvfs.exists(log_dir):
+                    xbmcvfs.mkdirs(log_dir)
+                
+                # Write using xbmcvfs (works on LibreELEC, Android, etc.)
+                f = xbmcvfs.File(log_file, 'a')
+                if f:
+                    f.write(log_entry + '\n')
+                    f.close()
+                    return  # Success - exit early
+        except Exception as e:
+            # File logging failed - switch to xbmc.log fallback
+            _debug_file_fallback = True
+    
+    # Fallback: log to Kodi's main log (always works)
+    try:
+        if xbmc:
+            # Use appropriate log level
+            log_level = xbmc.LOGINFO
+            if level == 'DEBUG':
+                log_level = xbmc.LOGDEBUG
+            elif level == 'WARNING':
+                log_level = xbmc.LOGWARNING
+            elif level == 'ERROR':
+                log_level = xbmc.LOGERROR
+            xbmc.log(f'[RareFilmm] {log_entry}', log_level)
+    except Exception:
+        pass  # Silent fail - can't log errors from logging
 
 
 def load_settings():
@@ -458,6 +476,7 @@ def load_settings():
 
 # Load settings at module import time
 load_settings()
+_debug_log('Debug logging initialized', 'INFO')
 
 
 # Compile regex patterns once for better performance
