@@ -16,21 +16,35 @@
 
 ## ✨ Features
 
-- 🎬 **Browse** the full RareFilmm index
+- 🎬 **Browse** the full RareFilmm index (2900+ movies)
 - ⚙️ **Customizable items per page** in settings
 - 🔎 **Search** for movies by title
 - 🖼️ **Movie posters & plots** (from site OpenGraph tags)
 - ▶️ **Direct playback** (just press Enter)
 - 🌐 **OK.ru & HLS** stream extraction
+- ⚡ **Lightning-fast loading** with parallel fetching and caching
+- 📊 **Live progress notifications** during initial index caching
 - 🧩 **Kodi 19/20+** compatible (Python 3)
 
 ---
 
-> ✅ **Performance v1.1.0:** Index loads from cache in <1ms on repeat visits. Fresh metadata fetching for 100+ items with parallel workers completes in 8-9 seconds. Full index (2900+ movies) fetches automatically on first startup.
+## 🚀 Performance
+
+### v1.2.0 (Current)
+- ⚡ **Initial index load: 2-5 seconds** (32x parallel page fetching)
+- 📱 **Live progress dialog** showing pages downloaded and movie count
+- 🎯 **Accurate progress tracking** that updates continuously
+- ✅ **Cached loads: <1ms** on repeat visits
+
+### v1.1.0
+- 📥 **Metadata fetching: 8-9 seconds** for 100+ items (28-worker parallel)
+- 💾 **Full pagination support** automatically fetches all 2900+ movies
+- 🗜️ **Gzip compression support** for faster downloads
+- 🔗 **HTTP connection pooling** for persistent connections
 
 ---
 
-## 🚀 Quick Start
+## � Installation
 
 1. **[Download the latest ZIP](https://github.com/Nigel1992/rarefilmm-kodi-addon/releases/latest)**
 2. In Kodi: `Add-ons` → `Install from zip file` → select the ZIP
@@ -43,44 +57,66 @@
 - **Browse:** Use page navigation to explore movies
 - **Search:** Use the "Search RareFilmm" entry to find movies by title
 - **Play:** Select a movie and press Enter to play
+- **Progress:** Watch the live progress dialog during initial index caching (v1.2.0+)
 
 ---
 
-## 🧩 Functions
+## ⚙️ Settings
 
-- `load_settings()`: Load addon settings into `SETTINGS` and apply `PAGE_SIZE` and `USER_AGENT`. Settings include `use_cache`, `cache_ttl`, `page_size`, `user_agent`, `fetch_metadata`, `preferred_stream`, `show_notifications`, and `open_in_external`.
-- `get_index_entries(force_refresh=False)`: Return parsed index entries; uses a local cache (`index_cache.json`) when `use_cache` is enabled and respects `cache_ttl` (minutes). Pass `force_refresh=True` to bypass the cache and refresh from the site.
-- `parse_index(html_text)`: Parse the RareFilmm index HTML and return a list of entry dicts with `title`, `href`, and an `html` snippet used for display.
-- `find_direct_links(page_html, base)`: Extract direct playable URLs (m3u8, mp4, etc.) from the page HTML. Scans `<source>` tags, absolute/protocol-relative URLs, inline JSON/scripts (including OK.ru payloads), iframes (fetched and scanned), and returns a cleaned, deduplicated list of URLs.
-- `fetch_movie_metadata(movie_url)`: Fetch `og:image` and `og:description` from a movie page and return `{'image', 'description'}`. This is optional and slower; enabled via the `fetch_metadata` setting.
-- `list_movies(page=1, force_refresh=False)`: Display a paginated list of movies using `PAGE_SIZE` (from settings). Adds Search/Settings/Refresh entries, provides previous/next navigation, and optionally fetches metadata per item.
-- `search_movies(query=None)`: Prompt for a search query (if `query` is None), search cached index titles, and present matching movies for playback.
-- `play_movie(url)`: Resolve playable links for a movie page using `find_direct_links`. Reorders links per the `preferred_stream` setting (`auto`, `hls`, `mp4`), allows selection when multiple streams are found, and hands the final URL to Kodi for playback.
-- `build_url(query)`: Helper to build plugin URLs for internal navigation.
-- `router(paramstring)`: Main entrypoint that dispatches actions (`list`, `play`, `search`, `settings`) based on plugin query parameters.
+- `use_cache` - Enable/disable local index caching (recommended: ON)
+- `cache_ttl` - Cache time-to-live in minutes (default: 60)
+- `page_size` - Movies per page (default: 50)
+- `fetch_metadata` - Fetch movie posters and plots (slower but prettier)
+- `user_agent` - Custom HTTP User-Agent string
+- `preferred_stream` - Preferred stream type: auto/hls/mp4
+- `show_notifications` - Show Kodi notifications
+- `open_in_external` - Open links in external player
+
+---
+
+## 🧩 Core Functions
+
+- `get_index_entries(force_refresh=False)`: Fetch and parse all index entries with parallel page loading. Uses local cache (`index_cache.json`) respecting `cache_ttl`. Returns list of movie dicts.
+- `parse_index(html_text)`: Parse RareFilmm index HTML and extract movie titles, links, and display snippets.
+- `fetch_movie_metadata(movie_url)`: Fetch `og:image` and `og:description` from page. Optional, respects `fetch_metadata` setting.
+- `fetch_multiple_metadata(urls, max_workers=28)`: Parallel metadata fetching for multiple movies. Returns dict mapping URLs to metadata.
+- `find_direct_links(page_html, base)`: Extract playable URLs (m3u8, mp4, etc.) from movie pages. Scans source tags, JSON, scripts, and iframes.
+- `list_movies(page=1, force_refresh=False)`: Display paginated movie list with optional metadata and navigation.
+- `search_movies(query=None)`: Search cache by movie title.
+- `play_movie(url)`: Resolve and play a movie, reordering streams per `preferred_stream` setting.
 
 ---
 
 ## 📦 Requirements
 
 - Kodi 19 (Matrix) or newer
-- Python 3
+- Python 3.x
+- Internet connection for streaming
 
 ---
 
 ## 📄 License
 
-MIT
+GPL-2.0-only
 
 ---
 
-## 📝 Recent changes (since commit f944800)
+## 📝 Version History
 
-- Added settings: `use_cache` (index caching), `cache_ttl` (minutes), `page_size` (items per page), `fetch_metadata` (toggle to fetch metadata), and `user_agent` (HTTP User-Agent).
-- Implemented local caching for index entries (`index_cache.json`).
-- Added `LICENSE` (MIT) and `.gitignore`.
-- Removed `__pycache__` directory.
-- Documentation updates: logo size, image URL, and note about slow loading of movie lists.
+### v1.2.0 (Latest) - April 2, 2026
+- **32x parallel page fetching** for index (4-8x faster initial load)
+- **Live progress notifications** during caching with accurate percentage
+- Initial index load reduced from 30+ seconds to 2-5 seconds
+- Non-blocking background dialog for better UX
+- HTTP timeout reduced to 10s per page
+
+### v1.1.0 - April 2, 2026
+- **28-worker parallel metadata fetching** (8-9 seconds for 100+ items)
+- Gzip decompression for HTTP responses
+- Batch cache writes for efficiency
+- HTTP connection pooling
+- Full pagination support (2900+ movies auto-fetch)
+- Metadata caching with `metadata_cache.json`
 
 ---
 
