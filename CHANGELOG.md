@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.2] - 2026-04-02
+
+### New Features
+- **YouTube Addon Integration**: Movies hosted on YouTube are now played through Kodi's official YouTube addon
+  - Detects YouTube embeds and direct YouTube links
+  - Routes playback through `plugin://plugin.video.youtube/` for superior compatibility
+  - Works with YouTube addon (must be installed separately in Kodi)
+  - Seamless experience with standard YouTube player features
+
+### Technical Improvements
+- Added `_extract_youtube_id()` to parse various YouTube URL formats
+- Added `_is_youtube_url()` to detect YouTube sources
+- Added `_get_youtube_plugin_url()` to generate YouTube addon plugin URLs
+- Enhanced `find_direct_links()` to recognize YouTube URLs as valid playable sources
+- Enhanced `play_movie()` to route YouTube URLs to YouTube addon automatically
+
 ## [1.2.1] - 2026-04-02
 
 ### New Features
