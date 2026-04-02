@@ -1,33 +1,27 @@
 # Changelog
 
-## [1.2.3] - 2026-04-02
-
-### Fixed
-- **LibreELEC & Read-Only Systems Support**: Completely refactored debug logging for full xbmcvfs compatibility
-- **Robust Fallback**: If file writing fails (common on restricted systems), logs automatically fallback to Kodi's main log
-- **Path Fixes**: Now uses `special://profile/addon_data/` which works across all Kodi variants
-- **Pure VFS Operations**: Removed all os.path operations in debug logging, uses only xbmcvfs
-
-### Details
-- Uses xbmcvfs.File() for all file operations (works on LibreELEC, Android, Linux, Windows)
-- Automatic directory creation via xbmcvfs.mkdirs()
-- If file write fails once, falls back to xbmc.log() for remainder of session
-- Proper log level mapping (DEBUG, INFO, WARNING, ERROR)
-
-## [1.2.2] - 2026-04-02
-
-### Fixed
-- **Debug Logging Path**: Fixed debug log file path to correctly write to `~/.kodi/userdata/addon_data/plugin.video.rarefilmm/debug.log` instead of addon directory
-- **Directory Creation**: Ensured addon_data directory is automatically created if it doesn't exist
-- **Error Logging**: Improved error reporting - debug errors now logged to Kodi's log file for visibility
-
 ## [1.2.1] - 2026-04-02
 
-### Added
-- **Comprehensive debug logging**: New debug mode that logs all addon operations to a file
-  - All HTTP requests and responses with error handling
-  - Index fetching with cache operations and entry counts
-  - Movie playback with link extraction details and stream selection
+### New Features
+- **Comprehensive Debug Logging System**: Detailed logging of all addon operations
+  - HTTP requests/responses with sizes and timing
+  - Index caching operations and hit rates
+  - Movie playback tracking and stream selection
+  - Search operations and result counts
+  - Metadata fetching progress
+- **Debug Toggle in Settings**: New "Debug" category in addon settings
+  - "Enable debug logging" toggle (default: disabled)
+  - No performance impact when disabled
+  - No restart required to enable/disable
+
+### Technical Improvements
+- **Cross-Platform Support**: Full xbmcvfs implementation for LibreELEC, Android, Windows, macOS, Linux
+- **Robust Fallback**: If file write fails, logs automatically redirect to Kodi's main log
+- **Smart Path Handling**: Uses `special://profile/addon_data/` for universal compatibility
+- **Pure VFS Operations**: All file I/O uses xbmcvfs (no os.path operations in logging)
+- **Automatic Directory Creation**: Addon data directory created on first use
+- **Proper Log Levels**: DEBUG, INFO, WARNING, ERROR with Kodi level mapping
+- **No Performance Impact**: Logging disabled by default, zero overhead
   - Search operations with match counts
   - Metadata fetching with cache hit rates
   - User navigation and page visits
