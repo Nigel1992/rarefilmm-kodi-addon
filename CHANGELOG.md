@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.2.1] - 2026-04-02
+
+### Added
+- **Comprehensive debug logging**: New debug mode that logs all addon operations to a file
+  - All HTTP requests and responses with error handling
+  - Index fetching with cache operations and entry counts
+  - Movie playback with link extraction details and stream selection
+  - Search operations with match counts
+  - Metadata fetching with cache hit rates
+  - User navigation and page visits
+- **Debug toggle in settings**: New "Debug" category with "Enable debug logging" option (disabled by default)
+- **Structured logging**: Timestamped log entries with severity levels (INFO, DEBUG, WARNING, ERROR)
+- **Log file location**: `userdata/addon_data/plugin.video.rarefilmm/debug.log`
+
+### Features
+- Zero performance impact when debug mode is disabled
+- Detailed operational insights when enabled for troubleshooting
+- Automatic log file creation and directory management
+- Comprehensive link extraction logging for iframe/stream URL detection
+
 ## [1.2.0] - 2026-04-02
 
 ### Added

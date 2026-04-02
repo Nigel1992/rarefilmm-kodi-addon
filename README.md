@@ -25,12 +25,14 @@
 - ⚡ **Lightning-fast loading** with parallel fetching and caching
 - 📊 **Live progress notifications** during initial index caching
 - 🧩 **Kodi 19/20+** compatible (Python 3)
+- 🐛 **Debug logging** (optional) - toggle in settings to log all operations to file for troubleshooting
 
 ---
 
 ## 🚀 Performance
 
-### v1.2.0 (Current)
+### v1.2.1 (Current)
+- 🐛 **Debug mode**: Comprehensive logging with zero performance impact when disabled
 - ⚡ **Initial index load: 2-5 seconds** (32x parallel page fetching)
 - 📱 **Live progress dialog** showing pages downloaded and movie count
 - 🎯 **Accurate progress tracking** that updates continuously
