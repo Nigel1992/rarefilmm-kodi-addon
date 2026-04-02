@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2] - 2026-04-02
+
+### Fixed
+- **Debug Logging Path**: Fixed debug log file path to correctly write to `~/.kodi/userdata/addon_data/plugin.video.rarefilmm/debug.log` instead of addon directory
+- **Directory Creation**: Ensured addon_data directory is automatically created if it doesn't exist
+- **Error Logging**: Improved error reporting - debug errors now logged to Kodi's log file for visibility
+
 ## [1.2.1] - 2026-04-02
 
 ### Added
