@@ -101,10 +101,24 @@ def parse_index(html_text):
     return entries
 
 
+def _fetch_page(page_num):
+    """Helper to fetch a single page. Returns (page_num, html_text) or (page_num, None) on error."""
+    try:
+        if page_num == 1:
+            page_url = INDEX_URL
+        else:
+            page_url = INDEX_URL.rstrip('/') + '/page/' + str(page_num) + '/'
+        html_text = http_get(page_url, timeout=10)
+        return (page_num, html_text)
+    except Exception:
+        return (page_num, None)
+
+
 def get_index_entries(force_refresh=False):
     """Return parsed index entries, using a local cache when enabled.
     If force_refresh is True, the cache will be ignored and refreshed.
-    Fetches all pages (pagination aware) on first load.
+    Fetches all pages in parallel with aggressive worker pool for maximum speed.
+    Shows progress notifications to user during caching.
     """
     cache_file = _local_cache_file()
     now = int(time.time())
@@ -122,47 +136,110 @@ def get_index_entries(force_refresh=False):
             # fall through to refresh
             pass
 
-    # fetch and parse fresh - grab ALL pages
-    entries = []
-    page = 1
-    max_pages = 100  # safety limit to prevent infinite loops
-    seen_urls = set()
-    
-    while page <= max_pages:
-        try:
-            # Try paginated URL first, then fallback to base
-            if page == 1:
-                page_url = INDEX_URL
-            else:
-                page_url = INDEX_URL.rstrip('/') + '/page/' + str(page) + '/'
-            
-            html_text = http_get(page_url, timeout=15)
-            page_entries = parse_index(html_text)
-            
-            if not page_entries:
-                # No more entries, we've reached the end
-                break
-            
-            # Add only new entries we haven't seen before
-            for entry in page_entries:
-                if entry['href'] not in seen_urls:
-                    seen_urls.add(entry['href'])
-                    entries.append(entry)
-            
-            page += 1
-        except Exception:
-            # Stop on error (likely 404 on next page)
-            break
-
-    # attempt to write cache
+    # Create progress dialog
+    progress_dialog = None
     try:
-        ddir = os.path.dirname(cache_file)
-        if ddir and not os.path.exists(ddir):
-            os.makedirs(ddir, exist_ok=True)
-        with open(cache_file, 'w', encoding='utf-8') as f:
-            json.dump({'_ts': now, 'entries': entries}, f, ensure_ascii=False)
+        if xbmcgui:
+            progress_dialog = xbmcgui.DialogProgressBG()
+            progress_dialog.create('RareFilmm Index', 'Initializing...')
     except Exception:
         pass
+
+    # Fetch and parse fresh - grab ALL pages in parallel with aggressive worker pool
+    entries = []
+    seen_urls = set()
+    max_pages = 100  # safety limit
+    
+    try:
+        # Use ThreadPoolExecutor with high worker count (32x parallel requests)
+        # Most of the time is spent waiting for network I/O, so more workers = faster
+        with ThreadPoolExecutor(max_workers=32) as executor:
+            # Submit all page fetch tasks upfront
+            future_to_page = {
+                executor.submit(_fetch_page, page): page 
+                for page in range(1, max_pages + 1)
+            }
+            
+            # Process completed pages as they finish
+            consecutive_empty = 0  # Track consecutive empty pages to stop early
+            processed_count = 0
+            last_update = 0  # Track last percentage to avoid unnecessary updates
+            
+            for future in as_completed(future_to_page):
+                page_num, html_text = future.result()
+                processed_count += 1
+                
+                if html_text is None:
+                    # Error fetching this page
+                    consecutive_empty += 1
+                    if consecutive_empty >= 3:
+                        # Three consecutive fetch errors = we've hit the end
+                        break
+                    continue
+                
+                page_entries = parse_index(html_text)
+                
+                if not page_entries:
+                    # No entries on this page
+                    consecutive_empty += 1
+                    if consecutive_empty >= 3:
+                        # Three consecutive empty pages = definitely done
+                        break
+                else:
+                    consecutive_empty = 0
+                    # Add only new entries we haven't seen before
+                    for entry in page_entries:
+                        if entry['href'] not in seen_urls:
+                            seen_urls.add(entry['href'])
+                            entries.append(entry)
+                
+                # Update progress dialog - always move forward
+                if progress_dialog and processed_count % 2 == 0:  # Update every 2 pages to reduce flicker
+                    try:
+                        pct = min(80, processed_count * 2)  # 50 pages = ~100%, capped at 80%
+                        if pct != last_update:  # Only update if percentage changed
+                            msg = 'Pages: %d | Movies: %d' % (processed_count, len(entries))
+                            progress_dialog.update(pct, 'RareFilmm Index', msg)
+                            last_update = pct
+                    except Exception:
+                        pass
+                
+                # Bail early if we've processed way more pages than we're getting entries
+                # (means the site structure changed or we've hit the real end)
+                if processed_count > 50 and len(entries) < processed_count * 5:
+                    break
+
+        # Show disk caching phase
+        if progress_dialog:
+            try:
+                progress_dialog.update(90, 'RareFilmm Index', 'Saving cache: %d movies' % len(entries))
+            except Exception:
+                pass
+
+        # attempt to write cache
+        try:
+            ddir = os.path.dirname(cache_file)
+            if ddir and not os.path.exists(ddir):
+                os.makedirs(ddir, exist_ok=True)
+            with open(cache_file, 'w', encoding='utf-8') as f:
+                json.dump({'_ts': now, 'entries': entries}, f, ensure_ascii=False)
+        except Exception:
+            pass
+
+        # Update to 100% before closing
+        if progress_dialog:
+            try:
+                progress_dialog.update(100, 'RareFilmm Index', 'Complete! %d movies' % len(entries))
+            except Exception:
+                pass
+
+    finally:
+        # Always close progress dialog
+        if progress_dialog:
+            try:
+                progress_dialog.close()
+            except Exception:
+                pass
 
     return entries
 
