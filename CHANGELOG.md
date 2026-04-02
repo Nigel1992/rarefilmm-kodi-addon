@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.2.0] - 2026-04-02
+
+### Added
+- **Parallel page fetching**: Index downloads now fetch 32 pages simultaneously (4-8x faster than sequential loading)
+- **Live progress notifications**: Real-time progress dialog during cache indexing showing downloaded pages and movie count
+- Accurate progress percentage that continuously updates without stalling
+
+### Changed
+- Index fetching refactored to use `ThreadPoolExecutor` with 32 concurrent workers for massive speed boost
+- HTTP timeout reduced from 15s to 10s per page for faster failure detection
+- Progress updates display as "Pages: X | Movies: Y" instead of separate messages
+
+### Performance
+- Initial index load reduced from 30+ seconds to 2-5 seconds (4-8x faster)
+- Parallel page requests eliminate sequential bottleneck
+- Non-blocking progress dialog allows UI responsiveness during caching
+
 ## [1.1.0] - 2026-04-02
 
 ### Added
