@@ -748,11 +748,36 @@ def find_direct_links(page_html, base):
     if download_matches > 0:
         _debug_log(f'Found {download_matches} download link(s)', 'DEBUG')
     
+    # Direct YouTube URLs in page (not just iframes)
+    direct_youtube_matches = 0
+    for m in re.finditer(r'(?P<h>https?://(?:www\.)?(?:youtube\.com|youtu\.be)/[^\s\'"<>]+)', page_html, re.I):
+        url = m.group('h')
+        video_id = _extract_youtube_id(url)
+        if video_id:
+            yt_url = f'https://www.youtube.com/watch?v={video_id}'
+            if yt_url not in found:  # avoid duplicates
+                found.append(yt_url)
+                direct_youtube_matches += 1
+    if direct_youtube_matches > 0:
+        _debug_log(f'Found {direct_youtube_matches} direct YouTube URL(s)', 'DEBUG')
+    
     # iframes: fetch and search inside iframe content
     iframe_matches = 0
+    youtube_matches = 0
     for m in re.finditer(r'<iframe[^>]*src=[\'\"](?P<h>[^\'\"]+)[\'\"]', page_html, re.I):
         src = urllib.parse.urljoin(base, m.group('h'))
         iframe_matches += 1
+        
+        # Check if it's a YouTube embed
+        if 'youtube' in src.lower():
+            video_id = _extract_youtube_id(src)
+            if video_id:
+                yt_url = f'https://www.youtube.com/watch?v={video_id}'
+                found.append(yt_url)
+                youtube_matches += 1
+                _debug_log(f'Found YouTube embed: {video_id}', 'DEBUG')
+                continue
+        
         _debug_log(f'Found iframe {iframe_matches}: {src}', 'DEBUG')
         try:
             iframe_html = http_get(src)
@@ -821,6 +846,43 @@ def find_direct_links(page_html, base):
     _debug_log(f'Final extracted links: {len(out)} (after deduplication from {len(found)} raw matches)', 'INFO')
     return out
 
+def _extract_youtube_id(url):
+    """Extract video ID from various YouTube URL formats."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        
+        # Handle youtu.be/VIDEO_ID
+        if 'youtu.be' in parsed.netloc:
+            return parsed.path.lstrip('/').split('?')[0]
+        
+        # Handle youtube.com/watch?v=VIDEO_ID
+        if 'youtube.com' in parsed.netloc:
+            params = urllib.parse.parse_qs(parsed.query)
+            if 'v' in params and params['v']:
+                return params['v'][0]
+        
+        # Handle youtube.com/embed/VIDEO_ID
+        if 'youtube.com' in parsed.netloc and '/embed/' in parsed.path:
+            return parsed.path.split('/embed/')[1].split('?')[0]
+    except Exception:
+        pass
+    return None
+
+
+def _is_youtube_url(url):
+    """Check if URL is a YouTube video."""
+    if not url:
+        return False
+    return _extract_youtube_id(url) is not None
+
+
+def _get_youtube_plugin_url(video_id):
+    """Get the YouTube addon plugin URL for a video ID."""
+    if not video_id:
+        return None
+    return f'plugin://plugin.video.youtube/play/?video_id={video_id}'
+
+
 def play_movie(url):
     _debug_log(f'play_movie: {url}', 'INFO')
     try:
@@ -876,9 +938,12 @@ def play_movie(url):
             titles = []
             for u in direct_links:
                 try:
-                    p = urllib.parse.urlparse(u)
-                    ext = os.path.splitext(p.path)[1].lstrip('.') or 'link'
-                    titles.append('%s — %s' % (p.netloc or u, ext))
+                    if _is_youtube_url(u):
+                        titles.append('YouTube — video')
+                    else:
+                        p = urllib.parse.urlparse(u)
+                        ext = os.path.splitext(p.path)[1].lstrip('.') or 'link'
+                        titles.append('%s — %s' % (p.netloc or u, ext))
                 except Exception:
                     titles.append(u)
             _debug_log(f'Showing user selection dialog with {len(titles)} options', 'DEBUG')
@@ -891,6 +956,23 @@ def play_movie(url):
         else:
             play_url = direct_links[0]
             _debug_log(f'Selected first link (no GUI)', 'DEBUG')
+
+    # Check if it's a YouTube URL and route through YouTube addon
+    if _is_youtube_url(play_url):
+        video_id = _extract_youtube_id(play_url)
+        if video_id:
+            youtube_plugin_url = _get_youtube_plugin_url(video_id)
+            _debug_log(f'YouTube link detected, routing through YouTube addon: {video_id}', 'INFO')
+            if xbmcplugin:
+                li = xbmcgui.ListItem(path=youtube_plugin_url) if xbmcgui else None
+                try:
+                    xbmcplugin.setResolvedUrl(handle, True, li)
+                    return
+                except Exception:
+                    pass
+            if xbmc and hasattr(xbmc, 'Player'):
+                xbmc.Player().play(youtube_plugin_url)
+            return
 
     # Properly resolve the playable URL for Kodi
     _debug_log(f'Playing URL: {play_url[:100]}...', 'INFO')
