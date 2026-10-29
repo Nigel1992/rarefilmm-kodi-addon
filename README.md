@@ -19,6 +19,8 @@
 
 ## ✨ Features
 
+[![Vibe Coded](https://img.shields.io/badge/Vibe_Coded-✨-8A2BE2?style=for-the-badge)](https://github.com)
+
 - 🎬 **Browse** the full RareFilmm index (2900+ movies)
 - ⚙️ **Customizable items per page** in settings
 - 🔎 **Search** for movies by title
